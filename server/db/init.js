@@ -91,12 +91,12 @@ const seedDb = () => {
 
 
         const allCargo = [
-            { name: 'держатель для наушников на стол', volume: 200, for_sale: true },
-            { name: 'брелок скелет майнкрафт', volume: 180, for_sale: true },
-            { name: 'держатель для телефона котёнок', volume: 150, for_sale: true },
-            { name: 'картонные коробки', volume: 360, for_sale: false },
-            { name: '3D принтер', volume: 1500, for_sale: false },
-            { name: 'пластик для 3D-принтера', volume: 4600, for_sale: false },
+            { name: 'держатель для наушников на стол', volume: 20, for_sale: true },
+            { name: 'брелок скелет майнкрафт', volume: 18, for_sale: true },
+            { name: 'держатель для телефона котёнок', volume: 15, for_sale: true },
+            { name: 'картонные коробки', volume: 36, for_sale: false },
+            { name: '3D принтер', volume: 15000, for_sale: false },
+            { name: 'пластик для 3D-принтера', volume: 460, for_sale: false },
             { name: 'радиодетали', volume: 300, for_sale: false },
             { name: 'баллон с газом', volume: 120, for_sale: false },
             { name: 'магнитные метки', volume: 80, for_sale: false },
@@ -237,77 +237,82 @@ const seedDb = () => {
 
         setTimeout(() => {
             console.log('🏷️ Создаём зоны хранения...');
+
+            // 1. Создаём 4 зоны
             db.run(`
-    INSERT OR IGNORE INTO zone 
-        (name, warehouse_id, description, default_temp_min, default_temp_max, default_humidity_min, default_humidity_max)
-    VALUES 
-        ('Обычная зона',           1, 'Обычные товары',          2,  20, 35, 50),
-        ('Морозильная зона',       1, 'Товары требующие холода',  -5, 8,  30, 70),
-        ('Обычная зона 2',         2, 'Обычные товары',         19, 27, 60, 90),
-        ('Чувствительная зона',    2, 'Радиодетали и электроника',17, 24, 25, 50)
-`);
+        INSERT OR IGNORE INTO zone (name, warehouse_id, description, default_temp_min, default_temp_max, default_humidity_min, default_humidity_max)
+        VALUES
+            ('Обычная зона',           1, 'Обычные товары и упаковка',          19,  31, 35, 50),
+            ('Морозильная зона',       1, 'Товары требующие холода',           -5,  8, 30, 70),
+            ('Уличная зона',         2, 'Обычные товары',                    8, 22, 40, 90),
+            ('Чувствительная зона',    2, 'Радиодетали и электроника',         17, 24, 10, 50)
+    `, () => console.log('✅ 4 зоны успешно созданы'));
 
-            // Привязываем зоны к первым ячейкам каждого стеллажа (пример)
-            console.log('🔄 Назначаем зоны ячейкам...');
+            console.log('🔄 Привязываем стеллажи к зонам через bin_zone...');
 
-            // Зона 1: Склад 1 (печатная) — стеллажи 1 и 2
+            // Склад 1
+            // Стеллажи 1 и 2 → Обычная зона (zone 1)
             db.run(`
-  UPDATE bin 
-  SET zone_id = 1 
-  WHERE shelf_id IN (
-    SELECT s.id 
-    FROM shelf s 
-    JOIN rack r ON s.rack_id = r.id 
-    WHERE r.warehouse_id = 1 AND r.id IN (1, 2)
-  )
-`, [], () => console.log('✅ Зона 1 назначена (Склад 1, стеллажи 1+2)'));
+        INSERT OR IGNORE INTO bin_zone (bin_id, zone_id)
+        SELECT b.id, 1
+        FROM bin b
+        JOIN shelf s ON b.shelf_id = s.id
+        JOIN rack r ON s.rack_id = r.id
+        WHERE r.warehouse_id = 1 
+          AND r.name IN ('Стеллаж 1', 'Стеллаж 2')
+    `, [], () => console.log('✅ Склад 1: Стеллажи 1+2 → Обычная зона'));
 
-// Зона 2: Склад 1 (печатная) — стеллаж 3
+            // Стеллаж 3 → Морозильная зона (zone 2)
             db.run(`
-  UPDATE bin 
-  SET zone_id = 2 
-  WHERE shelf_id IN (
-    SELECT s.id 
-    FROM shelf s 
-    JOIN rack r ON s.rack_id = r.id 
-    WHERE r.warehouse_id = 1 AND r.id = 3
-  )
-`, [], () => console.log('✅ Зона 2 назначена (Склад 1, стеллаж 3)'));
+        INSERT OR IGNORE INTO bin_zone (bin_id, zone_id)
+        SELECT b.id, 2
+        FROM bin b
+        JOIN shelf s ON b.shelf_id = s.id
+        JOIN rack r ON s.rack_id = r.id
+        WHERE r.warehouse_id = 1 AND r.name = 'Стеллаж 3'
+    `, [], () => console.log('✅ Склад 1: Стеллаж 3 → Морозильная зона'));
 
-// Зона 3: Склад 2 (мастерская) — стеллажи 1 и 2
+            // Склад 2 (Мастерская)
+            // Стеллажи 1 и 2 → Чувствительная зона (zone 4)
             db.run(`
-  UPDATE bin 
-  SET zone_id = 3 
-  WHERE shelf_id IN (
-    SELECT s.id 
-    FROM shelf s 
-    JOIN rack r ON s.rack_id = r.id 
-    WHERE r.warehouse_id = 2 AND r.id IN (1, 2)
-  )
-`, [], () => console.log('✅ Зона 3 назначена (Склад 2, стеллажи 1+2)'));
+        INSERT OR IGNORE INTO bin_zone (bin_id, zone_id)
+        SELECT b.id, 4
+        FROM bin b
+        JOIN shelf s ON b.shelf_id = s.id
+        JOIN rack r ON s.rack_id = r.id
+        WHERE r.warehouse_id = 2 
+          AND r.name IN ('Стеллаж 1', 'Стеллаж 2')
+    `, [], () => console.log('✅ Склад 2: Стеллажи 1+2 → Чувствительная зона'));
 
-// Зона 4: Склад 2 (мастерская) — стеллажи 3 и 4
+            // Стеллажи 3 и 4 → Обычная зона 2 (zone 3)
             db.run(`
-  UPDATE bin 
-  SET zone_id = 4 
-  WHERE shelf_id IN (
-    SELECT s.id 
-    FROM shelf s 
-    JOIN rack r ON s.rack_id = r.id 
-    WHERE r.warehouse_id = 2 AND r.id IN (3, 4)
-  )
-`, [], () => console.log('✅ Зона 4 назначена (Склад 2, стеллажи 3+4)'));
-            console.log('✅ Зоны успешно назначены по стеллажам');
+        INSERT OR IGNORE INTO bin_zone (bin_id, zone_id)
+        SELECT b.id, 3
+        FROM bin b
+        JOIN shelf s ON b.shelf_id = s.id
+        JOIN rack r ON s.rack_id = r.id
+        WHERE r.warehouse_id = 2 
+          AND r.name IN ('Стеллаж 3', 'Стеллаж 4')
+    `, [], () => console.log('✅ Склад 2: Стеллажи 3+4 → Обычная зона 2'));
 
-            // Создаём датчики и привязываем их к ячейкам (по одному на зону)
-            db.run(`INSERT OR IGNORE INTO sensor (id, bin_id, sensor_type, mqtt_topic) VALUES (40, 1, 'DHT22+BME280', 'warehouse/sensor/40')`);
-            db.run(`INSERT OR IGNORE INTO sensor (id, bin_id, sensor_type, mqtt_topic) VALUES (41, 20, 'DHT22+BME280', 'warehouse/sensor/41')`);
-            db.run(`INSERT OR IGNORE INTO sensor (id, bin_id, sensor_type, mqtt_topic) VALUES (42, 50, 'DHT22+BME280', 'warehouse/sensor/42')`);
-            db.run(`INSERT OR IGNORE INTO sensor (id, bin_id, sensor_type, mqtt_topic) VALUES (43, 80, 'DHT22+BME280', 'warehouse/sensor/43')`);
+            // На всякий случай — все ячейки, которые остались без зоны
+            db.run(`INSERT OR IGNORE INTO bin_zone (bin_id, zone_id)
+            SELECT b.id, 1 FROM bin b 
+            LEFT JOIN bin_zone bz ON b.id = bz.bin_id 
+            WHERE bz.bin_id IS NULL`);
 
-            console.log('✅ Зоны и датчики успешно привязаны');
+            console.log('✅ Все стеллажи успешно привязаны к зонам');
+
+            // 3. Датчики
+            console.log('🔌 Создаём датчики...');
+            db.run(`INSERT OR IGNORE INTO sensor (id, zone_id, sensor_type, mqtt_topic) VALUES (40, 1, 'DHT22+BME280', 'warehouse/zone/1')`);
+            db.run(`INSERT OR IGNORE INTO sensor (id, zone_id, sensor_type, mqtt_topic) VALUES (41, 2, 'DHT22+BME280', 'warehouse/zone/2')`);
+            db.run(`INSERT OR IGNORE INTO sensor (id, zone_id, sensor_type, mqtt_topic) VALUES (42, 4, 'DHT22+BME280', 'warehouse/zone/4')`);
+            db.run(`INSERT OR IGNORE INTO sensor (id, zone_id, sensor_type, mqtt_topic) VALUES (43, 3, 'DHT22+BME280', 'warehouse/zone/3')`);
+
+            console.log('✅ Датчики привязаны: 40→Обычная, 41→Морозильная, 42→Чувствительная, 43→Обычная зона 2');
+
         }, 13000);
-
         console.log('🎉 Все товары успешно добавлены и привязаны к ячейкам');
     });
 

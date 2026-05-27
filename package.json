@@ -6,6 +6,7 @@
   "scripts": {
     "start:server": "node server/index.js",
     "setup:db": "node server/db/setup.js",
+    "iot-simulator": "node iot-simulator.js",
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
@@ -16,6 +17,7 @@
     "axios": "^1.9.0",
     "cors": "^2.8.5",
     "express": "^5.1.0",
+    "node-fetch": "^3.3.2",
     "node-telegram-bot-api": "^0.66.0",
     "qr-image": "^3.2.0",
     "qrcode": "^1.5.4",

@@ -7,29 +7,29 @@ const sensors = [
     {
         id: 40,
         name: "Склад 1 - Обычная зона",
-        tempMin: 18, tempMax: 26,
-        humMin: 35,  humMax: 65,
+        tempMin: 19, tempMax: 31,
+        humMin: 35,  humMax: 50,
         isFreezer: false
     },
     {
         id: 41,
         name: "Склад 1 - Морозильная зона (лёгкое охлаждение)",
-        tempMin: 8,  tempMax: 14,
-        humMin: 30,  humMax: 55,
+        tempMin: -5,  tempMax: 8,
+        humMin: 30,  humMax: 70,
         isFreezer: true
     },
     {
         id: 42,
-        name: "Склад 2 - Обычная зона",
-        tempMin: 19, tempMax: 27,
-        humMin: 40,  humMax: 70,
+        name: "Уличная зона",
+        tempMin: 8, tempMax: 22,
+        humMin: 40,  humMax: 90,
         isFreezer: false
     },
     {
         id: 43,
         name: "Склад 2 - Радиодетали (чувствительная зона)",
         tempMin: 17, tempMax: 24,
-        humMin: 25,  humMax: 50,
+        humMin: 10,  humMax: 50,
         isFreezer: false
     }
 ];

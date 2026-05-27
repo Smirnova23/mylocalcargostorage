@@ -20,19 +20,39 @@ const WarehouseStructure = ({ structure, onEditRack, onDeleteRack }) => {
                                 <div key={shelf.id} style={{ marginLeft: '40px' }}>
                                     Этаж: {shelf.level}
                                     {shelf.bins?.map(bin => {
-                                        const occupied = bin.cargos ? bin.cargos.reduce((sum, c) => sum + (c.quantity || 0) * (c.volume || 0), 0) : 0;
-                                        const fillPercent = bin.max_volume > 0 ? Math.round((occupied / bin.max_volume) * 100) : 0;
+                                        const occupied = bin.cargos
+                                            ? bin.cargos.reduce((sum, c) => sum + (c.quantity || 0) * (c.volume || 0), 0)
+                                            : 0;
+                                        const fillPercent = bin.max_volume > 0
+                                            ? Math.round((occupied / bin.max_volume) * 100)
+                                            : 0;
+
                                         return (
-                                            <div key={bin.id} style={{ marginLeft: '60px', border: '1px dashed #ccc', padding: '8px', marginBottom: '8px' }}>
-                                                Ячейка: {bin.cell_number}
-                                                (Габариты: {bin.width}×{bin.height}×{bin.depth} см,
-                                                Объём: {bin.max_volume} см³,
-                                                <strong style={{ color: fillPercent > 80 ? 'red' : fillPercent > 50 ? 'orange' : 'green' }}>
-                                                    {' '}{fillPercent}% заполнено
-                                                </strong>)
+                                            <div key={bin.id} style={{
+                                                marginLeft: '60px',
+                                                border: '1px dashed #ccc',
+                                                padding: '10px',
+                                                marginBottom: '8px',
+                                                backgroundColor: fillPercent > 80 ? '#ffe6e6' : '#f9f9f9'
+                                            }}>
+                                                <div style={{ fontWeight: 'bold' }}>
+                                                    Ячейка: {bin.cell_number}
+                                                    <span style={{ marginLeft: '15px', color: '#006400' }}>
+                                                           {bin.zone_name}
+                                                    </span>
+                                                </div>
+                                                <div style={{ fontSize: '0.9em', color: '#555' }}>
+                                                    Габариты: {bin.width}×{bin.height}×{bin.depth} см |
+                                                    Объём: {bin.max_volume} см³ |
+                                                    <strong style={{
+                                                        color: fillPercent > 80 ? 'red' : fillPercent > 50 ? 'orange' : 'green'
+                                                    }}>
+                                                        {fillPercent}% заполнено
+                                                    </strong>
+                                                </div>
 
                                                 {bin.cargos && bin.cargos.length > 0 ? (
-                                                    <ul>
+                                                    <ul style={{ marginTop: '8px' }}>
                                                         {bin.cargos.reduce((acc, cargo) => {
                                                             const existing = acc.find(c => c.name === cargo.name);
                                                             if (existing) existing.quantity += cargo.quantity;
@@ -40,12 +60,12 @@ const WarehouseStructure = ({ structure, onEditRack, onDeleteRack }) => {
                                                             return acc;
                                                         }, []).map(cargo => (
                                                             <li key={cargo.id}>
-                                                                Груз: {cargo.name} (Количество: {cargo.quantity})
+                                                                {cargo.name} — {cargo.quantity} шт.
                                                             </li>
                                                         ))}
                                                     </ul>
                                                 ) : (
-                                                    <p style={{ color: '#999' }}>Нет грузов</p>
+                                                    <p style={{ color: '#999', fontSize: '0.9em' }}>Нет грузов</p>
                                                 )}
                                             </div>
                                         );

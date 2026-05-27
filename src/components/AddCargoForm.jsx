@@ -26,11 +26,8 @@ const AddCargoForm = ({ structure }) => {
   const [selectedBinId, setSelectedBinId] = useState(null);
   const [showRecommendation, setShowRecommendation] = useState(false);
   const [loadingRecommend, setLoadingRecommend] = useState(false);
-
-  // Список товаров для копирования шаблона
   const [existingCargos, setExistingCargos] = useState([]);
 
-  // Правильный useEffect
   useEffect(() => {
     const cargos = [];
     structure.forEach(warehouse => {
@@ -54,13 +51,14 @@ const AddCargoForm = ({ structure }) => {
       alert('Сначала введите название груза');
       return;
     }
+
     setLoadingRecommend(true);
     try {
-      const bins = await getRecommendedBins(cargoData.name);
-      setRecommendedBins(bins);
+      let bins = await getRecommendedBins(cargoData.name);
       const uniqueBins = bins.filter((bin, index, self) =>
-          index === self.findIndex(b => b.warehouse === bin.warehouse && b.rack === bin.rack)
+          index === self.findIndex(b => b.bin_id === bin.bin_id)
       );
+
       setRecommendedBins(uniqueBins);
       setShowRecommendation(true);
       setSelectedBinId(null);
@@ -160,7 +158,7 @@ const AddCargoForm = ({ structure }) => {
                   const fillColor = bin.fill_percent > 80 ? '#ffe6e6' : bin.fill_percent > 60 ? '#fff2cc' : '#e6ffe6';
 
                   return (
-                      <div key={bin.bin_id} style={{
+                      <div key={`bin-${bin.bin_id}`} style={{
                         padding: '14px',
                         marginBottom: '10px',
                         border: isSelected ? '3px solid #006400' : '1px solid #ddd',

@@ -71,7 +71,6 @@ function App() {
         />
         <ForecastDisplay />
         <div style={{ marginTop: '40px', padding: '20px', border: '2px solid #006400', borderRadius: '12px', backgroundColor: '#f8fff8' }}>
-            <h3>📡 Мониторинг датчиков (реальное время)</h3>
             <SensorReadingsTable />
         </div>
 
