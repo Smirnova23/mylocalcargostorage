@@ -475,20 +475,20 @@ router.get('/AddMeasure', (req, res) => {
   const humidity = parseFloat(hum);
   const pressure = parseFloat(press || 760);
 
-  // 1. Сохраняем показание в историю
+  // Сохраняем показание
   db.run(`
     INSERT INTO sensor_reading (sensor_id, timestamp, temperature, humidity, pressure)
     VALUES (?, ?, ?, ?, ?)
   `, [sensor_id, timestamp || new Date().toISOString(), temperature, humidity, pressure]);
 
-  // 2. Обновляем показания во всех ячейках этой зоны
+  // Обновляем ячейки
   db.run(`
     UPDATE bin 
     SET temperature = ?, humidity = ?, pressure = ?, last_measurement = CURRENT_TIMESTAMP
     WHERE id IN (SELECT bin_id FROM bin_zone WHERE zone_id = (SELECT zone_id FROM sensor WHERE id = ?))
   `, [temperature, humidity, pressure, sensor_id]);
 
-  // 3. Получаем информацию о зоне
+  // Получаем данные зоны
   db.get(`
     SELECT z.id AS zone_id, z.name AS zone_name,
            z.default_temp_min, z.default_temp_max,
@@ -498,14 +498,13 @@ router.get('/AddMeasure', (req, res) => {
     WHERE s.id = ?
   `, [sensor_id], (err, zone) => {
     if (err || !zone) {
-      console.log('⚠️ Не удалось найти зону для датчика', sensor_id);
-      return res.json({ status: 'ok', message: 'Данные приняты (зона не найдена)' });
+      console.log('⚠️ Зона не найдена');
+      return res.json({ status: 'ok' });
     }
 
     const zoneId = zone.zone_id;
     const zoneName = zone.zone_name;
 
-    // Инициализируем состояние зоны, если ещё нет
     if (!zoneStates[zoneId]) {
       zoneStates[zoneId] = {
         name: zoneName,
@@ -513,6 +512,10 @@ router.get('/AddMeasure', (req, res) => {
         problemParam: null,
         currentTemp: temperature,
         currentHum: humidity,
+        default_temp_min: zone.default_temp_min,
+        default_temp_max: zone.default_temp_max,
+        default_humidity_min: zone.default_humidity_min,
+        default_humidity_max: zone.default_humidity_max,
         affectedCargos: []
       };
     }
@@ -525,14 +528,10 @@ router.get('/AddMeasure', (req, res) => {
     let problemParam = null;
     let affectedCargos = [];
 
-    // Проверка температуры
-    const tempViolation =
-        (zone.default_temp_min !== null && temperature < zone.default_temp_min - 0.5) ||
+    const tempViolation = (zone.default_temp_min !== null && temperature < zone.default_temp_min - 0.5) ||
         (zone.default_temp_max !== null && temperature > zone.default_temp_max + 0.5);
 
-    // Проверка влажности
-    const humViolation =
-        (zone.default_humidity_min !== null && humidity < zone.default_humidity_min - 2) ||
+    const humViolation = (zone.default_humidity_min !== null && humidity < zone.default_humidity_min - 2) ||
         (zone.default_humidity_max !== null && humidity > zone.default_humidity_max + 2);
 
     if (tempViolation) {
@@ -543,59 +542,37 @@ router.get('/AddMeasure', (req, res) => {
       problemParam = 'humidity';
     }
 
-    // Если нарушение — получаем список затронутых товаров
     if (newStatus === 'critical') {
+      // Получаем товары в зоне
       db.all(`
-        SELECT DISTINCT c.name
+        SELECT DISTINCT c.name 
         FROM bin_zone bz
         JOIN bin b ON bz.bin_id = b.id
         JOIN bin_cargo bc ON b.id = bc.bin_id
         JOIN cargo c ON bc.cargo_id = c.id
-        JOIN product_characteristics pc ON pc.cargo_id = c.id
         WHERE bz.zone_id = ?
-          AND (
-            (? = 'temperature' AND (
-              (pc.temp_min IS NOT NULL AND ? < pc.temp_min) OR
-              (pc.temp_max IS NOT NULL AND ? > pc.temp_max)
-            )) OR
-            (? = 'humidity' AND (
-              (pc.humidity_min IS NOT NULL AND ? < pc.humidity_min) OR
-              (pc.humidity_max IS NOT NULL AND ? > pc.humidity_max)
-            ))
-          )
-      `, [zoneId, problemParam, temperature, temperature, problemParam, humidity, humidity], (err2, cargos) => {
-        if (!err2 && cargos) {
-          affectedCargos = cargos.map(c => c.name);
-        }
+      `, [zoneId], (err2, rows) => {
+        affectedCargos = rows ? rows.map(r => r.name) : [];
 
-        // Обновляем состояние зоны
         currentState.status = newStatus;
         currentState.problemParam = problemParam;
         currentState.affectedCargos = affectedCargos;
 
-        console.log(`🚨 Зона "${zoneName}" — ${newStatus.toUpperCase()} (${problemParam})`);
+        console.log(`🚨 Зона "${zoneName}" — CRITICAL (${problemParam})`);
 
-        res.json({
-          status: 'ok',
-          message: 'Данные датчика приняты',
-          zoneState: currentState
-        });
+        res.json({ status: 'ok' });
       });
     } else {
-      // Возвращение в норму
       currentState.status = 'norm';
       currentState.problemParam = null;
       currentState.affectedCargos = [];
 
       console.log(`✅ Зона "${zoneName}" — Норма`);
-      res.json({
-        status: 'ok',
-        message: 'Данные датчика приняты',
-        zoneState: currentState
-      });
+      res.json({ status: 'ok' });
     }
   });
 });
+
 router.get('/alerts', (req, res) => {
   res.json(recentAlerts);
 });
