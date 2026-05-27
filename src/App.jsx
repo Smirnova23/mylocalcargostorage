@@ -10,6 +10,7 @@ import GenerateBinQR from './components/GenerateBinQR';
 import ForecastDisplay from "./components/ForecastDisplay.jsx";
 import SensorReadingsTable from './components/SensorReadingsTable';
 import ProductCharacteristicsTable from './components/ProductCharacteristicsTable';
+import ZoneStatusDashboard from './components/ZoneStatusDashboard'
 
 function App() {
     const { structure, error, createRack, updateRack, deleteRack, deleteCargo, createCargo, assignCargoToBin, searchCargo, getBinQRUrl } = useWarehouseApi();
@@ -69,6 +70,7 @@ function App() {
             onEditRack={handleEditRack}
             onDeleteRack={handleDeleteRack}
         />
+        <ZoneStatusDashboard />
         <ForecastDisplay />
         <div style={{ marginTop: '40px', padding: '20px', border: '2px solid #006400', borderRadius: '12px', backgroundColor: '#f8fff8' }}>
             <SensorReadingsTable />

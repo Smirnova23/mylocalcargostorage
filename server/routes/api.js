@@ -40,6 +40,15 @@ router.get('/sensor/latest', (req, res, next) => {
   binsRouter.handle(req, res, next);
 });
 
+router.get('/zones/status', (req, res, next) => {
+  console.log('Передача /zones/status → binsRouter');
+  binsRouter.handle(req, res, next);
+});
+
+router.get('/bin/alerts', (req, res, next) => {
+  binsRouter.handle(req, res, next);
+});
+
 router.get('/cargo/characteristics', (req, res, next) => {
   console.log('Передача /cargo/characteristics → binsRouter');
   binsRouter.handle(req, res, next);

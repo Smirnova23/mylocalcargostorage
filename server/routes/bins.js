@@ -5,6 +5,7 @@ import qr from 'qr-image';
 const router = express.Router();
 
 let recentAlerts = [];
+let zoneStates = {};
 // Получение содержимого ячейки
 router.get('/:id/cargo', (req, res) => {
   const { id } = req.params;
@@ -474,118 +475,133 @@ router.get('/AddMeasure', (req, res) => {
   const humidity = parseFloat(hum);
   const pressure = parseFloat(press || 760);
 
-  // Сохраняем показание
+  // 1. Сохраняем показание в историю
   db.run(`
     INSERT INTO sensor_reading (sensor_id, timestamp, temperature, humidity, pressure)
     VALUES (?, ?, ?, ?, ?)
   `, [sensor_id, timestamp || new Date().toISOString(), temperature, humidity, pressure]);
 
-  // Обновляем все ячейки зоны
+  // 2. Обновляем показания во всех ячейках этой зоны
   db.run(`
     UPDATE bin 
     SET temperature = ?, humidity = ?, pressure = ?, last_measurement = CURRENT_TIMESTAMP
     WHERE id IN (SELECT bin_id FROM bin_zone WHERE zone_id = (SELECT zone_id FROM sensor WHERE id = ?))
   `, [temperature, humidity, pressure, sensor_id]);
 
-  // === УЛУЧШЕННАЯ ПРОВЕРКА АЛЕРТОВ ===
-  const alertSql = `
-    WITH zone_data AS (
-      SELECT 
-        z.id AS zone_id,
-        z.name AS zone_name,
-        z.default_temp_min,
-        z.default_temp_max,
-        z.default_humidity_min,
-        z.default_humidity_max,
-        ? AS curr_temp,
-        ? AS curr_hum
-      FROM sensor s 
-      JOIN zone z ON s.zone_id = z.id 
-      WHERE s.id = ?
-    )
-    -- 1. Температурное нарушение по зоне
-    SELECT 
-      'temperature' AS param,
-      zd.zone_name,
-      zd.curr_temp AS value,
-      zd.default_temp_min AS min_norm,
-      zd.default_temp_max AS max_norm,
-      GROUP_CONCAT(DISTINCT c.name) AS affected_goods
-    FROM zone_data zd
-    JOIN bin_zone bz ON bz.zone_id = zd.zone_id
-    JOIN bin b ON bz.bin_id = b.id
-    LEFT JOIN bin_cargo bc ON b.id = bc.bin_id
-    LEFT JOIN cargo c ON bc.cargo_id = c.id
-    LEFT JOIN product_characteristics pc ON pc.cargo_id = c.id
-    WHERE (zd.default_temp_min IS NOT NULL AND zd.curr_temp < zd.default_temp_min - 0.5)
-       OR (zd.default_temp_max IS NOT NULL AND zd.curr_temp > zd.default_temp_max + 0.5)
-       OR (pc.temp_min IS NOT NULL AND zd.curr_temp < pc.temp_min - 0.3)
-       OR (pc.temp_max IS NOT NULL AND zd.curr_temp > pc.temp_max + 0.3)
-    GROUP BY zd.zone_name
-
-    UNION ALL
-
-    -- 2. Влажностное нарушение по зоне
-    SELECT 
-      'humidity' AS param,
-      zd.zone_name,
-      zd.curr_hum AS value,
-      zd.default_humidity_min AS min_norm,
-      zd.default_humidity_max AS max_norm,
-      GROUP_CONCAT(DISTINCT c.name) AS affected_goods
-    FROM zone_data zd
-    JOIN bin_zone bz ON bz.zone_id = zd.zone_id
-    JOIN bin b ON bz.bin_id = b.id
-    LEFT JOIN bin_cargo bc ON b.id = bc.bin_id
-    LEFT JOIN cargo c ON bc.cargo_id = c.id
-    LEFT JOIN product_characteristics pc ON pc.cargo_id = c.id
-    WHERE (zd.default_humidity_min IS NOT NULL AND zd.curr_hum < zd.default_humidity_min - 2)
-       OR (zd.default_humidity_max IS NOT NULL AND zd.curr_hum > zd.default_humidity_max + 2)
-       OR (pc.humidity_min IS NOT NULL AND zd.curr_hum < pc.humidity_min - 1)
-       OR (pc.humidity_max IS NOT NULL AND zd.curr_hum > pc.humidity_max + 1)
-    GROUP BY zd.zone_name
-  `;
-
-  db.all(alertSql, [temperature, humidity, sensor_id], (err, alertRows) => {
-    const alerts = [];
-
-    if (!err && alertRows && alertRows.length > 0) {
-      alertRows.forEach(row => {
-        const isTemp = row.param === 'temperature';
-        const affected = row.affected_goods ? row.affected_goods.split(',').filter(Boolean) : [];
-
-        const message = `🚨 ${isTemp ? 'ТЕМПЕРАТУРА' : 'ВЛАЖНОСТЬ'} в зоне "${row.zone_name}" — ${Number(row.value).toFixed(1)}
-(норма: ${isTemp
-            ? `${row.min_norm}–${row.max_norm}°C`
-            : `${row.min_norm}–${row.max_norm}%`})
-Затронутые товары: ${affected.length ? affected.join(', ') : '—'}`;
-
-        alerts.push({
-          type: row.param,
-          zone_name: row.zone_name,
-          value: Number(row.value).toFixed(1),
-          norm: isTemp
-              ? `${row.min_norm}–${row.max_norm}°C`
-              : `${row.min_norm}–${row.max_norm}%`,
-          affected_goods: affected,
-          message: message
-        });
-      });
-
-      recentAlerts = [...alerts, ...recentAlerts].slice(0, 20);
-      console.log(`🚨 ОБНАРУЖЕНО ${alerts.length} НАРУШЕНИЕ(Й)!`);
-    } else {
-      console.log('✅ Нарушений не обнаружено');
+  // 3. Получаем информацию о зоне
+  db.get(`
+    SELECT z.id AS zone_id, z.name AS zone_name,
+           z.default_temp_min, z.default_temp_max,
+           z.default_humidity_min, z.default_humidity_max
+    FROM sensor s
+    JOIN zone z ON s.zone_id = z.id
+    WHERE s.id = ?
+  `, [sensor_id], (err, zone) => {
+    if (err || !zone) {
+      console.log('⚠️ Не удалось найти зону для датчика', sensor_id);
+      return res.json({ status: 'ok', message: 'Данные приняты (зона не найдена)' });
     }
 
-    res.json({
-      status: 'ok',
-      message: 'Данные датчика приняты',
-      alerts: alerts
-    });
+    const zoneId = zone.zone_id;
+    const zoneName = zone.zone_name;
+
+    // Инициализируем состояние зоны, если ещё нет
+    if (!zoneStates[zoneId]) {
+      zoneStates[zoneId] = {
+        name: zoneName,
+        status: 'norm',
+        problemParam: null,
+        currentTemp: temperature,
+        currentHum: humidity,
+        affectedCargos: []
+      };
+    }
+
+    const currentState = zoneStates[zoneId];
+    currentState.currentTemp = temperature;
+    currentState.currentHum = humidity;
+
+    let newStatus = 'norm';
+    let problemParam = null;
+    let affectedCargos = [];
+
+    // Проверка температуры
+    const tempViolation =
+        (zone.default_temp_min !== null && temperature < zone.default_temp_min - 0.5) ||
+        (zone.default_temp_max !== null && temperature > zone.default_temp_max + 0.5);
+
+    // Проверка влажности
+    const humViolation =
+        (zone.default_humidity_min !== null && humidity < zone.default_humidity_min - 2) ||
+        (zone.default_humidity_max !== null && humidity > zone.default_humidity_max + 2);
+
+    if (tempViolation) {
+      newStatus = 'critical';
+      problemParam = 'temperature';
+    } else if (humViolation) {
+      newStatus = 'critical';
+      problemParam = 'humidity';
+    }
+
+    // Если нарушение — получаем список затронутых товаров
+    if (newStatus === 'critical') {
+      db.all(`
+        SELECT DISTINCT c.name
+        FROM bin_zone bz
+        JOIN bin b ON bz.bin_id = b.id
+        JOIN bin_cargo bc ON b.id = bc.bin_id
+        JOIN cargo c ON bc.cargo_id = c.id
+        JOIN product_characteristics pc ON pc.cargo_id = c.id
+        WHERE bz.zone_id = ?
+          AND (
+            (? = 'temperature' AND (
+              (pc.temp_min IS NOT NULL AND ? < pc.temp_min) OR
+              (pc.temp_max IS NOT NULL AND ? > pc.temp_max)
+            )) OR
+            (? = 'humidity' AND (
+              (pc.humidity_min IS NOT NULL AND ? < pc.humidity_min) OR
+              (pc.humidity_max IS NOT NULL AND ? > pc.humidity_max)
+            ))
+          )
+      `, [zoneId, problemParam, temperature, temperature, problemParam, humidity, humidity], (err2, cargos) => {
+        if (!err2 && cargos) {
+          affectedCargos = cargos.map(c => c.name);
+        }
+
+        // Обновляем состояние зоны
+        currentState.status = newStatus;
+        currentState.problemParam = problemParam;
+        currentState.affectedCargos = affectedCargos;
+
+        console.log(`🚨 Зона "${zoneName}" — ${newStatus.toUpperCase()} (${problemParam})`);
+
+        res.json({
+          status: 'ok',
+          message: 'Данные датчика приняты',
+          zoneState: currentState
+        });
+      });
+    } else {
+      // Возвращение в норму
+      currentState.status = 'norm';
+      currentState.problemParam = null;
+      currentState.affectedCargos = [];
+
+      console.log(`✅ Зона "${zoneName}" — Норма`);
+      res.json({
+        status: 'ok',
+        message: 'Данные датчика приняты',
+        zoneState: currentState
+      });
+    }
   });
 });
 router.get('/alerts', (req, res) => {
   res.json(recentAlerts);
+});
+
+router.get('/zones/status', (req, res) => {
+  console.log('Запрос /zones/status');
+  res.json(zoneStates);
 });
 export default router;

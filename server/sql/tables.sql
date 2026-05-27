@@ -60,7 +60,6 @@ CREATE TABLE IF NOT EXISTS bin_cargo (
     FOREIGN KEY (cargo_id) REFERENCES cargo(id) ON DELETE CASCADE
 );
 
--- 2. Модуль IoT
 CREATE TABLE IF NOT EXISTS zone (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
@@ -73,13 +72,24 @@ CREATE TABLE IF NOT EXISTS zone (
     FOREIGN KEY (warehouse_id) REFERENCES warehouse(id) ON DELETE CASCADE
 );
 
+-- Соединительная таблица: одна ячейка может принадлежать одной или нескольким зонам
+CREATE TABLE IF NOT EXISTS bin_zone (
+    bin_id  INTEGER NOT NULL,
+    zone_id INTEGER NOT NULL,
+    assigned_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (bin_id, zone_id),
+    FOREIGN KEY (bin_id) REFERENCES bin(id) ON DELETE CASCADE,
+    FOREIGN KEY (zone_id) REFERENCES zone(id) ON DELETE CASCADE
+);
+
+-- Датчик привязан к ЗОНЕ (а не к отдельной ячейке)
 CREATE TABLE IF NOT EXISTS sensor (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    bin_id INTEGER,
+    zone_id INTEGER NOT NULL,                    -- ← главное поле
     sensor_type TEXT NOT NULL,
     mqtt_topic TEXT UNIQUE,
     last_seen TEXT,
-    FOREIGN KEY (bin_id) REFERENCES bin(id) ON DELETE SET NULL
+    FOREIGN KEY (zone_id) REFERENCES zone(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS sensor_reading (

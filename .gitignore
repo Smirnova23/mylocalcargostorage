@@ -1,0 +1,35 @@
+# Dependencies
+node_modules/
+dist/
+build/
+
+# Database
+warehouse.db
+*.db
+*.sqlite
+*.sqlite3
+
+# Logs
+*.log
+logs/
+
+# Environment variables
+.env
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Yarn / npm
+yarn.lock
+package-lock.json
+
+# Temporary files
+tmp/
+temp/
